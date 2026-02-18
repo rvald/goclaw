@@ -52,6 +52,17 @@ func (m *MockWebSocket) WriteMessage(messageType int, data []byte) error {
 	return nil
 }
 
+func (m *MockWebSocket) SetReadLimit(limit int64) {
+	// No-op for mock
+}
+
+func (m *MockWebSocket) SetReadDeadline(t time.Time) error {
+	return nil
+}
+
+func (m *MockWebSocket) SetPongHandler(h func(appData string) error) {
+}
+
 func (m *MockWebSocket) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -93,7 +104,7 @@ func TestConn_SendsChallenge(t *testing.T) {
 	ws := NewMockWebSocket()
 	handler := &MockConnHandler{}
 	auth := AuthConfig{Mode: "none"}
-	conn := NewConn(ws, auth, handler)
+	conn := NewConn(ws, ServerConfig{Auth: auth}, handler)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go conn.Run(ctx)
@@ -109,7 +120,7 @@ func TestConn_HandshakeHappy(t *testing.T) {
 	ws := NewMockWebSocket()
 	handler := &MockConnHandler{}
 	auth := AuthConfig{Mode: "token", Token: "secret"}
-	conn := NewConn(ws, auth, handler)
+	conn := NewConn(ws, ServerConfig{Auth: auth}, handler)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go conn.Run(ctx)
@@ -141,7 +152,7 @@ func TestConn_AuthFail(t *testing.T) {
 	ws := NewMockWebSocket()
 	handler := &MockConnHandler{}
 	auth := AuthConfig{Mode: "token", Token: "secret"}
-	conn := NewConn(ws, auth, handler)
+	conn := NewConn(ws, ServerConfig{Auth: auth}, handler)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go conn.Run(ctx)
@@ -173,7 +184,7 @@ func TestConn_ProtocolMismatch(t *testing.T) {
 	ws := NewMockWebSocket()
 	handler := &MockConnHandler{}
 	auth := AuthConfig{Mode: "none"}
-	conn := NewConn(ws, auth, handler)
+	conn := NewConn(ws, ServerConfig{Auth: auth}, handler)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go conn.Run(ctx)
@@ -195,7 +206,7 @@ func TestConn_FirstFrameMustBeConnect(t *testing.T) {
 	ws := NewMockWebSocket()
 	handler := &MockConnHandler{}
 	auth := AuthConfig{Mode: "none"}
-	conn := NewConn(ws, auth, handler)
+	conn := NewConn(ws, ServerConfig{Auth: auth}, handler)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go conn.Run(ctx)
@@ -214,7 +225,7 @@ func TestConn_RequestRoutingAfterAuth(t *testing.T) {
 	ws := NewMockWebSocket()
 	handler := &MockConnHandler{}
 	auth := AuthConfig{Mode: "none"}
-	conn := NewConn(ws, auth, handler)
+	conn := NewConn(ws, ServerConfig{Auth: auth}, handler)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go conn.Run(ctx)
@@ -244,7 +255,7 @@ func TestConn_GracefulClose(t *testing.T) {
 	ws := NewMockWebSocket()
 	handler := &MockConnHandler{}
 	auth := AuthConfig{Mode: "none"}
-	conn := NewConn(ws, auth, handler)
+	conn := NewConn(ws, ServerConfig{Auth: auth}, handler)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go conn.Run(ctx)
@@ -269,7 +280,7 @@ func TestConn_ContextCancel(t *testing.T) {
 	ws := NewMockWebSocket()
 	handler := &MockConnHandler{}
 	auth := AuthConfig{Mode: "none"}
-	conn := NewConn(ws, auth, handler)
+	conn := NewConn(ws, ServerConfig{Auth: auth}, handler)
 	ctx, cancel := context.WithCancel(context.Background())
 	go conn.Run(ctx)
 	_ = readFrame(t, ws) // challenge
@@ -342,7 +353,7 @@ func TestConn_DevicePairing_LoopbackAutoApprove(t *testing.T) {
 	ws := NewMockWebSocket()
 	handler := &MockConnHandler{}
 	auth := AuthConfig{Mode: "none"}
-	conn := NewConn(ws, auth, handler)
+	conn := NewConn(ws, ServerConfig{Auth: auth}, handler)
 	conn.WithPairing(svc, "127.0.0.1:54321", true)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -399,7 +410,7 @@ func TestConn_DevicePairing_InvalidSignature(t *testing.T) {
 	ws := NewMockWebSocket()
 	handler := &MockConnHandler{}
 	auth := AuthConfig{Mode: "none"}
-	conn := NewConn(ws, auth, handler)
+	conn := NewConn(ws, ServerConfig{Auth: auth}, handler)
 	conn.WithPairing(svc, "127.0.0.1:54321", true)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -442,7 +453,7 @@ func TestConn_DevicePairing_NonceMismatch(t *testing.T) {
 	ws := NewMockWebSocket()
 	handler := &MockConnHandler{}
 	auth := AuthConfig{Mode: "none"}
-	conn := NewConn(ws, auth, handler)
+	conn := NewConn(ws, ServerConfig{Auth: auth}, handler)
 	conn.WithPairing(svc, "127.0.0.1:54321", true)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -483,7 +494,7 @@ func TestConn_DevicePairing_RemoteRequiresPairing(t *testing.T) {
 	ws := NewMockWebSocket()
 	handler := &MockConnHandler{}
 	auth := AuthConfig{Mode: "none"}
-	conn := NewConn(ws, auth, handler)
+	conn := NewConn(ws, ServerConfig{Auth: auth}, handler)
 	conn.WithPairing(svc, "192.168.1.100:54321", false) // NOT local
 
 	ctx, cancel := context.WithCancel(context.Background())

@@ -20,12 +20,17 @@ const (
 	StateConnecting    ConnState = "connecting"
 	StateAuthenticated ConnState = "authenticated"
 	StateClosed        ConnState = "closed"
+
+	MaxMessageSize = 512 * 1024 // 512KB
 )
 
 // WebSocket is the interface for the underlying WebSocket connection.
 type WebSocket interface {
 	ReadMessage() (messageType int, data []byte, err error)
 	WriteMessage(messageType int, data []byte) error
+	SetReadLimit(limit int64)
+	SetReadDeadline(t time.Time) error
+	SetPongHandler(h func(appData string) error)
 	Close() error
 }
 
@@ -53,6 +58,8 @@ type Conn struct {
 	remoteAddr     string
 	isLocal        bool
 	challengeNonce string
+	pongWait       time.Duration
+	pingPeriod     time.Duration
 
 	// Set after successful device verification.
 	DeviceID    string
@@ -60,13 +67,15 @@ type Conn struct {
 }
 
 // NewConn creates a new connection in the connecting state.
-func NewConn(ws WebSocket, auth AuthConfig, handler ConnHandler) *Conn {
+func NewConn(ws WebSocket, config ServerConfig, handler ConnHandler) *Conn {
 	return &Conn{
-		ws:      ws,
-		auth:    auth,
-		handler: handler,
-		State:   StateConnecting,
-		ConnID:  generateID(),
+		ws:         ws,
+		auth:       config.Auth,
+		handler:    handler,
+		State:      StateConnecting,
+		ConnID:     generateID(),
+		pongWait:   config.PongWait,
+		pingPeriod: config.PingPeriod,
 	}
 }
 
@@ -97,6 +106,20 @@ func (c *Conn) writeMessage(messageType int, data []byte) error {
 // It blocks until the connection is closed or the context is cancelled.
 func (c *Conn) Run(ctx context.Context) {
 	defer c.shutdown()
+
+	c.ws.SetReadLimit(MaxMessageSize)
+
+	if c.pongWait > 0 {
+		c.ws.SetReadDeadline(time.Now().Add(c.pongWait))
+		c.ws.SetPongHandler(func(string) error {
+			c.ws.SetReadDeadline(time.Now().Add(c.pongWait))
+			return nil
+		})
+	}
+
+	if c.pingPeriod > 0 {
+		go c.pingLoop(ctx)
+	}
 
 	// Close websocket on context cancellation to unblock reads.
 	go func() {
@@ -331,6 +354,21 @@ func (c *Conn) shutdown() {
 
 	if wasAuthenticated {
 		c.handler.OnDisconnected(c)
+	}
+}
+
+func (c *Conn) pingLoop(ctx context.Context) {
+	ticker := time.NewTicker(c.pingPeriod)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := c.writeMessage(9, nil); err != nil { // 9 = PingMessage
+				return
+			}
+		}
 	}
 }
 

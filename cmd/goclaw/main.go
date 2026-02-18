@@ -4,7 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -13,6 +13,7 @@ import (
 
 	"github.com/rvald/goclaw/internal/discord"
 	"github.com/rvald/goclaw/internal/gateway"
+	"github.com/rvald/goclaw/internal/logger"
 	"github.com/rvald/goclaw/internal/pairing"
 )
 
@@ -99,7 +100,7 @@ func run(cfg Config) error {
 		bot.RegisterCommands(router.Commands())
 
 		if err := bot.Start(ctx); err != nil {
-			log.Printf("warning: discord failed to connect: %v", err)
+			slog.Warn("discord failed to connect", "error", err)
 			bot = nil // continue without Discord
 		}
 	}
@@ -129,7 +130,7 @@ func run(cfg Config) error {
 	// Run gateway (blocks until signal)
 	go func() {
 		<-ctx.Done()
-		log.Println("shutting down...")
+		slog.Info("shutting down...")
 
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer shutdownCancel()
@@ -149,6 +150,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
+
+	// Configure logging (JSON to file, Text to console)
+	logger.Setup(cfg.StateDir)
+
 	if err := run(cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
 		os.Exit(1)

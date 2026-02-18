@@ -7,9 +7,11 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/rvald/goclaw/internal/pairing"
+	"golang.org/x/time/rate"
 )
 
 // ServerConfig holds configuration for the gateway server.
@@ -18,6 +20,10 @@ type ServerConfig struct {
 	Bind       string // "loopback" (127.0.0.1) or "lan" (0.0.0.0)
 	Auth       AuthConfig
 	PairingSvc *pairing.Service // optional — nil disables device pairing
+	PongWait   time.Duration    // optional, default 60s
+	PingPeriod time.Duration    // optional, default (PongWait * 9) / 10
+	RateLimit  float64          // optional, default 5.0 (req/sec per IP)
+	RateBurst  int              // optional, default 10
 }
 
 // Server is an HTTP server that upgrades connections to WebSocket
@@ -29,18 +35,34 @@ type Server struct {
 	httpSrv  *http.Server
 	addr     string
 	mu       sync.Mutex
-	conns    []*Conn
-	connsMu  sync.Mutex
+	conns      []*Conn
+	connsMu    sync.Mutex
+	ipLimiters map[string]*rate.Limiter
+	limitersMu sync.Mutex
 }
 
 // NewServer creates a new gateway server.
 func NewServer(config ServerConfig, handler ConnHandler) *Server {
+	if config.PongWait == 0 {
+		config.PongWait = 60 * time.Second
+	}
+	if config.PingPeriod == 0 {
+		config.PingPeriod = (config.PongWait * 9) / 10
+	}
+	if config.RateLimit == 0 {
+		config.RateLimit = 5.0
+	}
+	if config.RateBurst == 0 {
+		config.RateBurst = 10
+	}
+
 	return &Server{
-		config:  config,
-		handler: handler,
+		config:     config,
+		handler:    handler,
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
+		ipLimiters: make(map[string]*rate.Limiter),
 	}
 }
 
@@ -56,6 +78,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/ws", s.handleWS)
 	mux.HandleFunc("/health", s.handleHealth)
+	mux.Handle("/metrics", MetricsHandler())
 
 	bindAddr := "127.0.0.1"
 	if s.config.Bind == "lan" {
@@ -98,12 +121,32 @@ func (s *Server) Shutdown(ctx context.Context) error {
 }
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
+	// IP Rate Limiting
+	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+	if ip == "" {
+		ip = r.RemoteAddr
+	}
+	
+	s.limitersMu.Lock()
+	limiter, exists := s.ipLimiters[ip]
+	if !exists {
+		limiter = rate.NewLimiter(rate.Limit(s.config.RateLimit), s.config.RateBurst)
+		s.ipLimiters[ip] = limiter
+	}
+	s.limitersMu.Unlock()
+
+	if !limiter.Allow() {
+		http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
+		IncError("rate_limit")
+		return
+	}
+
 	wsConn, err := s.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		return
 	}
 
-	conn := NewConn(wsConn, s.config.Auth, s.handler)
+	conn := NewConn(wsConn, s.config, s.handler)
 
 	// Attach pairing service if configured
 	if s.config.PairingSvc != nil {
@@ -116,9 +159,11 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	s.conns = append(s.conns, conn)
 	s.connsMu.Unlock()
 
+	IncConnectedClients()
 	conn.Run(r.Context())
 
 	s.removeConn(conn)
+	DecConnectedClients()
 }
 
 // isLoopback checks if the remote address is a loopback address.
