@@ -19,6 +19,15 @@
     - Remote control commands (`/snap`, `/locate`, `/status`, `/notify`).
 - **Node Registry**: In-memory session management for connected devices.
 - **Zero-Dependency**: Single binary, no external database (uses local JSON state).
+- **Observability**:
+    - Prometheus Metrics (`/metrics`) for real-time monitoring.
+    - Structured Logging (`slog`) with JSON output and automatic rotation.
+- **Reliability & Security**:
+    - Robust WebSocket handling with timeouts, heartbeats, and read limits.
+    - IP-based rate limiting to prevent abuse.
+- **Deployment Ready**:
+    - Multi-stage Docker build.
+    - Systemd service configuration.
 - **Graceful Shutdown**: Handles OS signals to cleanly close connections and save state.
 
 ---
@@ -96,7 +105,23 @@ go run ./cmd/goclaw/ --token secret
 
 ---
 
-## 🔐 Device Pairing
+## � Deployment
+
+### Docker
+
+```bash
+docker build -t goclaw .
+docker run -d -p 18789:18789 -v goclaw_data:/data goclaw
+```
+
+### Systemd
+
+1.  Copy `goclaw.service` to `/etc/systemd/system/`.
+2.  `systemctl enable --now goclaw`.
+
+---
+
+## �🔐 Device Pairing
 
 GoClaw uses a trust-on-first-use (TOFU) model with operator approval.
 
