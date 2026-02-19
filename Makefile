@@ -10,8 +10,24 @@ lint:                             ## Run golangci-lint
 	golangci-lint run
 build:                            ## Build binary
 	go build -o bin/goclaw ./cmd/goclaw
-run: build                        ## Run with Discord (sources .env)
+# Shared logic to generate a token if not provided
+TOKEN ?= $$(openssl rand -hex 16)
+ARGS = --token "$(TOKEN)" --discord-token "$$DISCORD_TOKEN" --guild-id "$$GUILD_ID"
+
+run: build                        ## Run with Discord (receives secrets from .env + auto-gen token)
+	@echo "Generated Token: $(TOKEN)"; \
 	set -a && . ./.env && set +a && \
-	./bin/goclaw --token test-secret --discord-token "$$DISCORD_TOKEN" --guild-id "$$GUILD_ID"
-run-gateway: build                ## Run gateway only (no Discord)
-	./bin/goclaw --token test-secret --port 18789
+	./bin/goclaw $(ARGS)
+
+run-nodiscord: build              ## Run WITHOUT Discord (auto-gen token)
+	@echo "Generated Token: $(TOKEN)"; \
+	./bin/goclaw --token "$(TOKEN)"
+
+run-remote: build                 ## Run REMOTE with Discord (bind 0.0.0.0:18790)
+	@echo "Generated Token: $(TOKEN)"; \
+	set -a && . ./.env && set +a && \
+	./bin/goclaw --bind lan --port 18789 $(ARGS)
+
+run-remote-nodiscord: build       ## Run REMOTE WITHOUT Discord (bind 0.0.0.0:18790)
+	@echo "Generated Token: $(TOKEN)"; \
+	./bin/goclaw --bind lan --port 18789 --token "$(TOKEN)"
