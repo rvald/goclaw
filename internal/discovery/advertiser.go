@@ -2,6 +2,10 @@ package discovery
 
 import (
 	"fmt"
+	"net"
+	"os"
+	"strings"
+	"log/slog"
 
 	"github.com/hashicorp/mdns"
 )
@@ -26,8 +30,8 @@ type Config struct {
 
 // Advertiser manages the mDNS service registration.
 type Advertiser struct {
-	server *mdns.Server
-	cfg    Config
+	servers []*mdns.Server
+	cfg     Config
 }
 
 // NewAdvertiser creates a new advertiser with the given config.
@@ -74,23 +78,66 @@ func (a *Advertiser) Start() error {
 		return fmt.Errorf("create mdns service: %w", err)
 	}
 
-	// Create and start server
-	// mdns.NewServer triggers advertisement immediately
-	server, err := mdns.NewServer(&mdns.Config{
-		Zone: service,
-	})
+	// Create and start servers on multicast-capable interfaces.
+	// mdns.NewServer triggers advertisement immediately.
+	ifaces, err := net.Interfaces()
 	if err != nil {
-		return fmt.Errorf("start mdns server: %w", err)
+		return fmt.Errorf("list interfaces: %w", err)
 	}
 
-	a.server = server
+	var servers []*mdns.Server
+	ifaceFilter := strings.TrimSpace(os.Getenv("GOCLAW_MDNS_IFACE"))
+	for _, iface := range ifaces {
+		iface := iface
+		if ifaceFilter != "" && iface.Name != ifaceFilter {
+			continue
+		}
+		if (iface.Flags&net.FlagUp) == 0 || (iface.Flags&net.FlagMulticast) == 0 {
+			continue
+		}
+
+		server, err := mdns.NewServer(&mdns.Config{
+			Zone:             service,
+			Iface:            &iface,
+			LogEmptyResponses: true,
+		})
+		if err != nil {
+			slog.Warn("mdns interface bind failed", "iface", iface.Name, "error", err)
+			continue
+		}
+		slog.Info("mdns interface bound", "iface", iface.Name)
+		servers = append(servers, server)
+	}
+
+	// Fallback to default interface if none succeeded and no explicit filter.
+	if len(servers) == 0 && ifaceFilter == "" {
+		server, err := mdns.NewServer(&mdns.Config{
+			Zone:             service,
+			LogEmptyResponses: true,
+		})
+		if err != nil {
+			return fmt.Errorf("start mdns server: %w", err)
+		}
+		servers = append(servers, server)
+	}
+	if len(servers) == 0 {
+		return fmt.Errorf("no mdns interfaces bound (filter=%q)", ifaceFilter)
+	}
+
+	a.servers = servers
 	return nil
 }
 
 // Stop shuts down the mDNS advertisement.
 func (a *Advertiser) Stop() error {
-	if a.server != nil {
-		return a.server.Shutdown()
+	var firstErr error
+	for _, server := range a.servers {
+		if server == nil {
+			continue
+		}
+		if err := server.Shutdown(); err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
-	return nil
+	return firstErr
 }

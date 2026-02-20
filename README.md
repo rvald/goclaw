@@ -78,12 +78,12 @@ Run directly with `go run`:
 
 ```bash
 # Minimal (Pairing enabled, Discord disabled)
-go run ./cmd/goclaw/ --token secret
+go run ./cmd/goclaw/ server --token secret
 
 # Full Stack (with Discord)
 export DISCORD_BOT_TOKEN="your_token"
 export DISCORD_GUILD_ID="your_guild_id"
-go run ./cmd/goclaw/ --token secret
+go run ./cmd/goclaw/ server --token secret
 ```
 
 ### Flags
@@ -96,6 +96,22 @@ go run ./cmd/goclaw/ --token secret
 | `--state-dir` | `$XDG_STATE_HOME/goclaw` | Directory for pairing state |
 | `--discord-token` | `$DISCORD_BOT_TOKEN` | Discord bot token |
 | `--guild-id` | `$DISCORD_GUILD_ID` | Discord guild ID (for instant commands) |
+
+### Bonjour / mDNS Discovery
+
+GoClaw advertises `_openclaw-gw._tcp` on the LAN via Bonjour (mDNS).
+
+To verify discovery on macOS:
+
+```bash
+dns-sd -B _openclaw-gw._tcp local.
+```
+
+If the service does not appear, you can force the mDNS interface:
+
+```bash
+GOCLAW_MDNS_IFACE=en0 ./bin/goclaw server --bind lan --port 18789
+```
 
 ### Makefile
 

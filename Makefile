@@ -21,13 +21,13 @@ run: build                        ## Run with Discord (receives secrets from .en
 
 run-nodiscord: build              ## Run WITHOUT Discord (auto-gen token)
 	@echo "Generated Token: $(TOKEN)"; \
-	./bin/goclaw --token "$(TOKEN)"
+	./bin/goclaw server --token "$(TOKEN)"
 
 run-remote: build                 ## Run REMOTE with Discord (bind 0.0.0.0:18790)
 	@echo "Generated Token: $(TOKEN)"; \
 	set -a && . ./.env && set +a && \
-	./bin/goclaw --bind lan --port 18789 $(ARGS)
+	./bin/goclaw server --bind lan --port 18789 $(ARGS)
 
 run-remote-nodiscord: build       ## Run REMOTE WITHOUT Discord (bind 0.0.0.0:18790)
 	@echo "Generated Token: $(TOKEN)"; \
-	./bin/goclaw --bind lan --port 18789 --token "$(TOKEN)"
+	./bin/goclaw server --bind lan --port 18789 --token "$(TOKEN)"
