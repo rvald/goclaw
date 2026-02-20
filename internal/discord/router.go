@@ -152,8 +152,11 @@ func (r *CommandRouter) HandleSnap(ctx context.Context, nodeID, facing string, q
 		return CommandResponse{OK: false, Message: fmt.Sprintf("❌ Error: %s", err.Error())}
 	}
 
-	if !result.OK || result.PayloadJSON == nil {
+	if !result.OK {
 		return CommandResponse{OK: false, Message: "❌ Camera snap failed"}
+	}
+	if result.PayloadJSON == nil {
+		return CommandResponse{OK: false, Message: "❌ Camera snap missing payload"}
 	}
 
 	var payload struct {
@@ -162,7 +165,9 @@ func (r *CommandRouter) HandleSnap(ctx context.Context, nodeID, facing string, q
 		Width       int    `json:"width"`
 		Height      int    `json:"height"`
 	}
-	json.Unmarshal([]byte(*result.PayloadJSON), &payload)
+	if err := json.Unmarshal([]byte(*result.PayloadJSON), &payload); err != nil {
+		return CommandResponse{OK: false, Message: fmt.Sprintf("❌ Camera snap decode failed: %v", err)}
+	}
 
 	imageData, _ := base64.StdEncoding.DecodeString(payload.ImageBase64)
 
@@ -188,6 +193,12 @@ func (r *CommandRouter) HandleLocate(ctx context.Context, nodeID string) Command
 	if err != nil {
 		return CommandResponse{OK: false, Message: fmt.Sprintf("❌ Error: %s", err.Error())}
 	}
+	if !result.OK {
+		return CommandResponse{OK: false, Message: "❌ Location request failed"}
+	}
+	if result.PayloadJSON == nil {
+		return CommandResponse{OK: false, Message: "❌ Location missing payload"}
+	}
 
 	var loc struct {
 		Latitude  float64 `json:"latitude"`
@@ -195,7 +206,9 @@ func (r *CommandRouter) HandleLocate(ctx context.Context, nodeID string) Command
 		Altitude  float64 `json:"altitude"`
 		Accuracy  float64 `json:"accuracy"`
 	}
-	json.Unmarshal([]byte(*result.PayloadJSON), &loc)
+	if err := json.Unmarshal([]byte(*result.PayloadJSON), &loc); err != nil {
+		return CommandResponse{OK: false, Message: fmt.Sprintf("❌ Location decode failed: %v", err)}
+	}
 
 	mapURL := fmt.Sprintf("https://google.com/maps?q=%f,%f", loc.Latitude, loc.Longitude)
 	msg := fmt.Sprintf("📍 Location: %f, %f (±%.0fm, alt %.1fm)\n%s",
@@ -219,6 +232,9 @@ func (r *CommandRouter) HandleStatus(ctx context.Context, nodeID string) Command
 	if err != nil {
 		return CommandResponse{OK: false, Message: fmt.Sprintf("❌ Error: %s", err.Error())}
 	}
+	if result.PayloadJSON == nil {
+		return CommandResponse{OK: false, Message: "❌ Device status missing payload"}
+	}
 
 	var status struct {
 		Battery struct {
@@ -234,10 +250,12 @@ func (r *CommandRouter) HandleStatus(ctx context.Context, nodeID string) Command
 		} `json:"storage"`
 		Network struct {
 			Type string `json:"type"`
-			SSID string `json:"ssid"`
+		SSID string `json:"ssid"`
 		} `json:"network"`
 	}
-	json.Unmarshal([]byte(*result.PayloadJSON), &status)
+	if err := json.Unmarshal([]byte(*result.PayloadJSON), &status); err != nil {
+		return CommandResponse{OK: false, Message: fmt.Sprintf("❌ Status decode failed: %v", err)}
+	}
 
 	batteryPct := int(status.Battery.Level * 100)
 	msg := fmt.Sprintf("🔋 Battery: %d%% (%s)\n🌡️ Thermal: %s\n📶 Network: %s\n💾 Storage: %.0f GB / %.0f GB",
