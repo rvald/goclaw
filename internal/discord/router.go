@@ -153,7 +153,7 @@ func (r *CommandRouter) HandleSnap(ctx context.Context, nodeID, facing string, q
 	}
 
 	if !result.OK {
-		return CommandResponse{OK: false, Message: "❌ Camera snap failed"}
+		return CommandResponse{OK: false, Message: r.invokeErrorMessage(result, "❌ Camera snap failed")}
 	}
 	if result.PayloadJSON == nil {
 		return CommandResponse{OK: false, Message: "❌ Camera snap missing payload"}
@@ -161,6 +161,7 @@ func (r *CommandRouter) HandleSnap(ctx context.Context, nodeID, facing string, q
 
 	var payload struct {
 		ImageBase64 string `json:"imageBase64"`
+		Base64      string `json:"base64"`
 		Format      string `json:"format"`
 		Width       int    `json:"width"`
 		Height      int    `json:"height"`
@@ -168,8 +169,18 @@ func (r *CommandRouter) HandleSnap(ctx context.Context, nodeID, facing string, q
 	if err := json.Unmarshal([]byte(*result.PayloadJSON), &payload); err != nil {
 		return CommandResponse{OK: false, Message: fmt.Sprintf("❌ Camera snap decode failed: %v", err)}
 	}
+	raw := payload.ImageBase64
+	if raw == "" {
+		raw = payload.Base64
+	}
+	if raw == "" {
+		return CommandResponse{OK: false, Message: "❌ Camera snap payload missing image data"}
+	}
 
-	imageData, _ := base64.StdEncoding.DecodeString(payload.ImageBase64)
+	imageData, err := base64.StdEncoding.DecodeString(raw)
+	if err != nil {
+		return CommandResponse{OK: false, Message: fmt.Sprintf("❌ Camera snap decode failed: %v", err)}
+	}
 
 	return CommandResponse{
 		OK:        true,
@@ -194,7 +205,7 @@ func (r *CommandRouter) HandleLocate(ctx context.Context, nodeID string) Command
 		return CommandResponse{OK: false, Message: fmt.Sprintf("❌ Error: %s", err.Error())}
 	}
 	if !result.OK {
-		return CommandResponse{OK: false, Message: "❌ Location request failed"}
+		return CommandResponse{OK: false, Message: r.invokeErrorMessage(result, "❌ Location request failed")}
 	}
 	if result.PayloadJSON == nil {
 		return CommandResponse{OK: false, Message: "❌ Location missing payload"}
@@ -231,6 +242,9 @@ func (r *CommandRouter) HandleStatus(ctx context.Context, nodeID string) Command
 	})
 	if err != nil {
 		return CommandResponse{OK: false, Message: fmt.Sprintf("❌ Error: %s", err.Error())}
+	}
+	if !result.OK {
+		return CommandResponse{OK: false, Message: r.invokeErrorMessage(result, "❌ Device status failed")}
 	}
 	if result.PayloadJSON == nil {
 		return CommandResponse{OK: false, Message: "❌ Device status missing payload"}
@@ -301,10 +315,17 @@ func (r *CommandRouter) HandleNotify(ctx context.Context, nodeID, title, body st
 		return CommandResponse{Message: fmt.Sprintf("❌ invoke error: %v", err)}
 	}
 	if !result.OK {
-		return CommandResponse{Message: "❌ Notification failed"}
+		return CommandResponse{Message: r.invokeErrorMessage(result, "❌ Notification failed")}
 	}
 
 	return CommandResponse{OK: true, Message: fmt.Sprintf("✅ Notification sent to **%s**", nd.DisplayName)}
+}
+
+func (r *CommandRouter) invokeErrorMessage(result InvokeResult, fallback string) string {
+	if result.Error != nil && result.Error.Message != "" {
+		return fmt.Sprintf("❌ %s", result.Error.Message)
+	}
+	return fallback
 }
 
 // --- Device Pairing Handlers ---

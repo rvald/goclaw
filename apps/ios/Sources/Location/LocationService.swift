@@ -35,9 +35,13 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
 
         let status = self.manager.authorizationStatus
         if status == .notDetermined {
-            self.manager.requestWhenInUseAuthorization()
-            let updated = await self.awaitAuthorizationChange()
-            if mode != .always { return updated }
+            if mode == .always {
+                self.manager.requestAlwaysAuthorization()
+            } else {
+                self.manager.requestWhenInUseAuthorization()
+            }
+            // Only await after requesting; main thread is not blocked
+            return await self.awaitAuthorizationChange()
         }
 
         if mode == .always {

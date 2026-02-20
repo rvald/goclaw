@@ -95,6 +95,39 @@ func TestIntegration_ConnectAndInvoke(t *testing.T) {
 	assert.Contains(t, *result.PayloadJSON, "40.7128")
 }
 
+func TestIntegration_OperatorSessionNotRegistered(t *testing.T) {
+	gw, err := New(GatewayConfig{
+		Port:      0,
+		AuthToken: "test-token",
+	})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go gw.Run(ctx)
+
+	require.Eventually(t, func() bool { return gw.server.Addr() != "" }, 2*time.Second, 10*time.Millisecond)
+
+	ws, _, err := websocket.DefaultDialer.Dial("ws://"+gw.server.Addr()+"/ws", nil)
+	require.NoError(t, err)
+	defer ws.Close()
+
+	_, _, _ = ws.ReadMessage() // challenge
+	connectReq, _ := MarshalRequest("req-1", "connect", ConnectParams{
+		MinProtocol: 3, MaxProtocol: 3,
+		Client: ClientInfo{
+			ID: "openclaw-ios", Version: "1.0", Platform: "ios", Mode: "ui",
+		},
+		Role: "operator",
+		Auth: &ConnectAuth{Token: "test-token"},
+	})
+	ws.WriteMessage(websocket.TextMessage, connectReq)
+	_, _, _ = ws.ReadMessage() // hello-ok
+
+	nodes := gw.registry.List()
+	assert.Len(t, nodes, 0, "operator session should not be registered as node")
+}
+
 func TestIntegration_TickKeepAlive(t *testing.T) {
 	gw, err := New(GatewayConfig{
 		Port:         0,

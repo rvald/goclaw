@@ -29,6 +29,7 @@ type InvokeRequest struct {
 type InvokeResult struct {
 	OK          bool
 	PayloadJSON *string
+	Error       *protocol.ErrorShape
 }
 
 // pendingInvoke tracks a single in-flight invocation.
@@ -91,7 +92,11 @@ func (inv *Invoker) Invoke(ctx context.Context, req InvokeRequest) (InvokeResult
 
 	select {
 	case result := <-pi.result:
-		return InvokeResult{OK: result.OK, PayloadJSON: result.PayloadJSON}, nil
+		return InvokeResult{
+			OK:          result.OK,
+			PayloadJSON: result.PayloadJSON,
+			Error:       result.Error,
+		}, nil
 	case <-pi.cancel:
 		return InvokeResult{OK: false}, fmt.Errorf("node disconnected")
 	case <-time.After(timeout):

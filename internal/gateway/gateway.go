@@ -88,6 +88,18 @@ func (gw *Gateway) Shutdown(ctx context.Context) error {
 // --- ConnHandler implementation ---
 
 func (gw *Gateway) OnAuthenticated(conn *Conn) error {
+	if conn.ConnectParams == nil {
+		return nil
+	}
+	role := conn.ConnectParams.Role
+	if role == "" {
+		role = "node"
+	}
+	// Only register node sessions; operator sessions should not receive node commands.
+	if role != "node" {
+		return nil
+	}
+
 	session := node.NewNodeSession(
 		conn.ConnectParams.Client.ID,
 		conn.ConnID,

@@ -95,6 +95,13 @@ func (b *Bot) handleInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 	data := i.ApplicationCommandData()
 	ctx := context.Background()
 
+	// Defer immediately to avoid Discord's 3s interaction timeout.
+	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+	}); err != nil {
+		log.Printf("discord: failed to defer interaction: %v", err)
+	}
+
 	// Helper to extract string option
 	strOpt := func(name string) string {
 		for _, opt := range data.Options {
@@ -140,17 +147,14 @@ func (b *Bot) handleInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 		resp = CommandResponse{Message: fmt.Sprintf("Unknown command: %s", data.Name)}
 	}
 
-	// Send response
-	respData := &discordgo.InteractionResponse{
-		Type: discordgo.InteractionResponseChannelMessageWithSource,
-		Data: &discordgo.InteractionResponseData{
-			Content: resp.Message,
-		},
+	// Send response as a follow-up (supports attachments).
+	followup := &discordgo.WebhookParams{
+		Content: resp.Message,
 	}
 
-	// If we have image data, attach it as a file
+	// If we have image data, attach it as a file.
 	if len(resp.ImageData) > 0 {
-		respData.Data.Files = []*discordgo.File{
+		followup.Files = []*discordgo.File{
 			{
 				Name:        "snap.png",
 				ContentType: "image/png",
@@ -159,8 +163,8 @@ func (b *Bot) handleInteraction(s *discordgo.Session, i *discordgo.InteractionCr
 		}
 	}
 
-	if err := s.InteractionRespond(i.Interaction, respData); err != nil {
-		log.Printf("discord: failed to respond to interaction: %v", err)
+	if _, err := s.FollowupMessageCreate(i.Interaction, true, followup); err != nil {
+		log.Printf("discord: failed to send follow-up: %v", err)
 	}
 }
 
