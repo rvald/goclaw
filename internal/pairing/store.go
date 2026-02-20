@@ -108,6 +108,27 @@ func NewStore(stateDir string) (*Store, error) {
 	return s, nil
 }
 
+// Reload re-reads pairing state from disk.
+// Useful when another process (e.g., CLI) updates the store.
+func (s *Store) Reload() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	pending := make(map[string]PendingRequest)
+	paired := make(map[string]PairedDevice)
+
+	if err := s.loadJSON("pending.json", &pending); err != nil {
+		return err
+	}
+	if err := s.loadJSON("paired.json", &paired); err != nil {
+		return err
+	}
+
+	s.state.PendingByID = pending
+	s.state.PairedByDevice = paired
+	return nil
+}
+
 // --- Read operations ---
 
 // GetPendingRequest returns a pending request by ID, or nil if not found.

@@ -15,19 +15,23 @@ TOKEN ?= $$(openssl rand -hex 16)
 ARGS = --token "$(TOKEN)" --discord-token "$$DISCORD_TOKEN" --guild-id "$$GUILD_ID"
 
 run: build                        ## Run with Discord (receives secrets from .env + auto-gen token)
-	@echo "Generated Token: $(TOKEN)"; \
+	@TOKEN=$${TOKEN:-$$(openssl rand -hex 16)}; \
+	echo "Generated Token: $$TOKEN"; \
 	set -a && . ./.env && set +a && \
-	./bin/goclaw $(ARGS)
+	./bin/goclaw server --token "$$TOKEN" --discord-token "$$DISCORD_TOKEN" --guild-id "$$GUILD_ID"
 
 run-nodiscord: build              ## Run WITHOUT Discord (auto-gen token)
-	@echo "Generated Token: $(TOKEN)"; \
-	./bin/goclaw server --token "$(TOKEN)"
+	@TOKEN=$${TOKEN:-$$(openssl rand -hex 16)}; \
+	echo "Generated Token: $$TOKEN"; \
+	./bin/goclaw server --token "$$TOKEN"
 
 run-remote: build                 ## Run REMOTE with Discord (bind 0.0.0.0:18790)
-	@echo "Generated Token: $(TOKEN)"; \
+	@TOKEN=$${TOKEN:-$$(openssl rand -hex 16)}; \
+	echo "Generated Token: $$TOKEN"; \
 	set -a && . ./.env && set +a && \
-	./bin/goclaw server --bind lan --port 18789 $(ARGS)
+	./bin/goclaw server --bind lan --port 18789 --token "$$TOKEN" --discord-token "$$DISCORD_TOKEN" --guild-id "$$GUILD_ID"
 
 run-remote-nodiscord: build       ## Run REMOTE WITHOUT Discord (bind 0.0.0.0:18790)
-	@echo "Generated Token: $(TOKEN)"; \
-	./bin/goclaw server --bind lan --port 18789 --token "$(TOKEN)"
+	@TOKEN=$${TOKEN:-$$(openssl rand -hex 16)}; \
+	echo "Generated Token: $$TOKEN"; \
+	./bin/goclaw server --bind lan --port 18789 --token "$$TOKEN"

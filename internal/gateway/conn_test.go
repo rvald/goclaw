@@ -140,6 +140,18 @@ func TestConn_HandshakeHappy(t *testing.T) {
 	require.True(t, ok, "expected ResponseFrame")
 	assert.Equal(t, "req-1", res.ID)
 	assert.True(t, res.OK)
+	require.NotNil(t, res.Payload)
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal(res.Payload, &payload))
+	assert.Equal(t, "hello-ok", payload["type"])
+	assert.Equal(t, float64(ServerProtocol), payload["protocol"])
+	snapshot, ok := payload["snapshot"].(map[string]any)
+	require.True(t, ok)
+	_, hasPresence := snapshot["presence"]
+	_, hasHealth := snapshot["health"]
+	_, hasStateVersion := snapshot["stateVersion"]
+	_, hasUptime := snapshot["uptimeMs"]
+	assert.True(t, hasPresence && hasHealth && hasStateVersion && hasUptime)
 	// 4. Handler should have been notified
 	time.Sleep(50 * time.Millisecond) // let goroutine process
 	handler.mu.Lock()
@@ -323,7 +335,7 @@ func signDevicePayload(t *testing.T, privKey ed25519.PrivateKey, pubKey ed25519.
 		ClientID:   params.Client.ID,
 		ClientMode: params.Client.Mode,
 		Role:       role,
-		Scopes:     params.Caps,
+		Scopes:     params.Scopes,
 		SignedAtMs: signedAt,
 		Token:      authToken,
 		Nonce:      nonce,

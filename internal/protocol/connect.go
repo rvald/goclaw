@@ -12,6 +12,7 @@ type ConnectParams struct {
 	MaxProtocol int              `json:"maxProtocol"`
 	Client      ClientInfo       `json:"client"`
 	Role        string           `json:"role,omitempty"`
+	Scopes      []string         `json:"scopes,omitempty"`
 	Caps        []string         `json:"caps,omitempty"`
 	Commands    []string         `json:"commands,omitempty"`
 	Permissions map[string]bool  `json:"permissions,omitempty"`

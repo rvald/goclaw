@@ -26,6 +26,7 @@ struct SettingsTab: View {
     @AppStorage("gateway.manual.host") private var manualGatewayHost: String = ""
     @AppStorage("gateway.manual.port") private var manualGatewayPort: Int = 18789
     @AppStorage("gateway.manual.tls") private var manualGatewayTLS: Bool = true
+    @AppStorage("gateway.discovery.allowInsecure") private var allowInsecureDiscovery: Bool = false
     @AppStorage("gateway.discovery.debugLogs") private var discoveryDebugLogsEnabled: Bool = false
     @AppStorage("canvas.debugStatusEnabled") private var canvasDebugStatusEnabled: Bool = false
     @State private var connectingGatewayID: String?
@@ -158,6 +159,11 @@ struct SettingsTab: View {
                             .keyboardType(.numberPad)
 
                         Toggle("Use TLS", isOn: self.$manualGatewayTLS)
+
+                        Toggle("Allow Insecure Discovery", isOn: self.$allowInsecureDiscovery)
+                        Text("Dev-only: allow plaintext ws:// from Bonjour discovery when TLS isn't available.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
 
                         Button {
                             Task { await self.connectManual() }

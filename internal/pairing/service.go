@@ -277,6 +277,9 @@ func (s *Service) RevokeDeviceToken(deviceID, role string) *DeviceAuthToken {
 // CheckPairingStatus determines what action is needed during handshake.
 // Called by the conn module after signature verification succeeds.
 func (s *Service) CheckPairingStatus(params CheckPairingParams) PairingAction {
+	// Best-effort reload in case another process (CLI) updated the store.
+	_ = s.store.Reload()
+
 	device := s.store.GetPairedDevice(params.DeviceID)
 
 	// Already paired with matching key

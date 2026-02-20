@@ -92,9 +92,10 @@ final class GatewayConnectionController {
         let tlsRequired = true
         let stored = GatewayTLSStore.loadFingerprint(stableID: stableID)
 
-        guard gateway.tlsEnabled || stored != nil else { return }
+        let allowInsecure = UserDefaults.standard.bool(forKey: "gateway.discovery.allowInsecure")
+        guard gateway.tlsEnabled || stored != nil || allowInsecure else { return }
 
-        if tlsRequired, stored == nil {
+        if tlsRequired, stored == nil, gateway.tlsEnabled {
             guard let url = self.buildGatewayURL(host: target.host, port: target.port, useTLS: true)
             else { return }
             guard let fp = await self.probeTLSFingerprint(url: url) else { return }
@@ -119,7 +120,9 @@ final class GatewayConnectionController {
             port: target.port,
             useTLS: tlsParams?.required == true)
         else { return }
-        GatewaySettingsStore.saveLastGatewayConnectionDiscovered(stableID: stableID, useTLS: true)
+        GatewaySettingsStore.saveLastGatewayConnectionDiscovered(
+            stableID: stableID,
+            useTLS: tlsParams?.required == true)
         self.didAutoConnect = true
         self.startAutoConnect(
             url: url,
@@ -496,6 +499,7 @@ final class GatewayConnectionController {
         components.scheme = scheme
         components.host = host
         components.port = port
+        components.path = "/ws"
         return components.url
     }
 

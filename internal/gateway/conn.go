@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -218,12 +219,32 @@ func (c *Conn) processConnect(data []byte) error {
 		c.DeviceToken = deviceToken
 	}
 
-	// Send success response (include auth info if we have a device token)
-	var responsePayload any
+	// Send success response with a full hello-ok payload.
+	responsePayload := map[string]any{
+		"type":     "hello-ok",
+		"protocol": protocol.ServerProtocol,
+		"server": map[string]any{
+			"version": "goclaw",
+			"connId":  c.ConnID,
+		},
+		"features": map[string]any{
+			"methods": []string{},
+			"events":  []string{},
+		},
+		"snapshot": map[string]any{
+			"presence":    []any{},
+			"health":      map[string]any{},
+			"stateVersion": map[string]any{"presence": 0, "health": 0},
+			"uptimeMs":    0,
+		},
+		"policy": map[string]any{
+			"maxPayload":       1048576,
+			"maxBufferedBytes": 4194304,
+			"tickIntervalMs":   15000,
+		},
+	}
 	if deviceToken != "" {
-		responsePayload = map[string]any{
-			"auth": protocol.HelloAuthInfo{DeviceToken: deviceToken},
-		}
+		responsePayload["auth"] = protocol.HelloAuthInfo{DeviceToken: deviceToken}
 	}
 
 	resData, err := protocol.MarshalResponse(req.ID, true, responsePayload, nil)
@@ -263,7 +284,7 @@ func (c *Conn) verifyDevice(reqID string, params protocol.ConnectParams) (string
 		ClientID:   params.Client.ID,
 		ClientMode: params.Client.Mode,
 		Role:       role,
-		Scopes:     params.Caps,
+		Scopes:     params.Scopes,
 		SignedAtMs: dev.SignedAt,
 		Token:      authToken,
 		Nonce:      dev.Nonce,
@@ -271,6 +292,17 @@ func (c *Conn) verifyDevice(reqID string, params protocol.ConnectParams) (string
 
 	// 2. Verify the signature
 	if !pairing.VerifySignature(dev.PublicKey, payload, dev.Signature) {
+		slog.Warn(
+			"device signature verification failed",
+			"deviceId", dev.ID,
+			"clientId", params.Client.ID,
+			"clientMode", params.Client.Mode,
+			"role", role,
+			"scopes", params.Caps,
+			"signedAtMs", dev.SignedAt,
+			"noncePresent", dev.Nonce != "",
+			"tokenPresent", authToken != "",
+		)
 		c.sendError(reqID, "INVALID_SIGNATURE", "device signature verification failed")
 		return "", fmt.Errorf("device signature verification failed")
 	}
@@ -294,14 +326,14 @@ func (c *Conn) verifyDevice(reqID string, params protocol.ConnectParams) (string
 		DeviceID:  derivedID,
 		PublicKey: dev.PublicKey,
 		Role:      role,
-		Scopes:    params.Caps,
+		Scopes:    params.Scopes,
 		IsLocal:   c.isLocal,
 	})
 
 	switch action.Status {
 	case "paired", "auto-approved":
 		// Ensure device has a valid token
-		tok := c.pairingSvc.EnsureDeviceToken(derivedID, role, params.Caps)
+		tok := c.pairingSvc.EnsureDeviceToken(derivedID, role, params.Scopes)
 		if tok != nil {
 			return tok.Token, nil
 		}
